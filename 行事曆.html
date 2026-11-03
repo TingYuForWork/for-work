@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorkSync 團隊共編桌面行事曆</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    /* 自訂捲軸樣式 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .grid-cell {
+      min-height: 110px;
+    }
+    @media (max-width: 768px) {
+      .grid-cell {
+        min-height: 75px;
+      }
+    }
+    /* 自訂動態背景容器 */
+    #customBgContainer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: -2;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      transition: background 0.3s ease, filter 0.3s ease;
+    }
+    #customBgOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: -1;
+      pointer-events: none;
+      transition: background-color 0.3s ease;
+    }
+    .frosted-glass {
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-indigo-100 selection:text-indigo-900 transition-colors duration-300">
+  <!-- 背景圖層與遮罩 -->
+  <div id="customBgContainer"></div>
+  <div id="customBgOverlay"></div>
+
+  <!-- 頂部工具列 -->
+  <header class="bg-white/90 frosted-glass border-b border-slate-200/80 sticky top-0 z-30 shadow-xs transition-colors duration-300">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- 品牌 & 年月切換 -->
+      <div class="flex items-center space-x-3 sm:space-x-5">
+        <div class="flex items-center space-x-2 text-indigo-600 font-bold text-xl tracking-tight">
+          <div class="p-2 bg-indigo-50 rounded-xl border border-indigo-100">
+            <i class="ph ph-calendar-check text-2xl"></i>
+          </div>
+          <span class="hidden sm:inline text-slate-900">WorkSync</span>
+        </div>
+
+        <div class="h-6 w-px bg-slate-200 hidden sm:block"></div>
+
+        <!-- 月份控制器 -->
+        <div class="flex items-center space-x-1.5">
+          <button id="btnPrevMonth" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition" title="上一月">
+            <i class="ph ph-caret-left text-lg"></i>
+          </button>
+          <h2 id="currentMonthYearLabel" class="text-base sm:text-lg font-semibold text-slate-800 min-w-[130px] text-center select-none">
+            載入中...
+          </h2>
+          <button id="btnNextMonth" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition" title="下一月">
+            <i class="ph ph-caret-right text-lg"></i>
+          </button>
+          <button id="btnToday" class="ml-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 transition">
+            今天
+          </button>
+        </div>
+      </div>
+
+      <!-- 右側：共編房間、篩選與桌面安裝教學 -->
+      <div class="flex items-center flex-wrap gap-2.5">
+        <!-- 顏色分類篩選器 -->
+        <div class="relative">
+          <select id="filterCategory" class="text-xs bg-slate-100 border border-slate-200 text-slate-700 rounded-lg pl-2.5 pr-7 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none appearance-none cursor-pointer">
+            <option value="ALL">全部標籤類別</option>
+          </select>
+          <i class="ph ph-funnel text-slate-400 absolute right-2 top-2 pointer-events-none text-xs"></i>
+        </div>
+
+        <!-- 自訂標籤管理按鈕 -->
+        <button id="btnManageCategories" class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1.5 shadow-2xs" title="自訂與編輯標籤顏色">
+          <i class="ph ph-tag text-indigo-600"></i>
+          <span>自訂標籤</span>
+        </button>
+
+        <!-- 自訂背景按鈕 (新增) -->
+        <button id="btnOpenBgModal" class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1.5 shadow-2xs" title="更換背景顏色或自訂圖片">
+          <i class="ph ph-image text-indigo-600"></i>
+          <span>自訂背景</span>
+        </button>
+
+        <!-- 自訂字體與大小按鈕 (新增) -->
+        <button id="btnOpenFontModal" class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1.5 shadow-2xs" title="調整字體與文字大小">
+          <i class="ph ph-text-t text-indigo-600"></i>
+          <span>字體與大小</span>
+        </button>
+
+        <!-- 團隊共編房號 (Room Key) -->
+        <div class="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200">
+          <span class="text-xs font-medium text-slate-500 px-1.5 flex items-center gap-1">
+            <i class="ph ph-users text-sm"></i> 房間:
+          </span>
+          <input type="text" id="roomKeyInput" value="team-work" 
+                 class="w-24 sm:w-28 text-xs font-semibold text-indigo-700 bg-white border border-slate-200 rounded px-1.5 py-1 focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
+                 placeholder="輸入代碼">
+          <button id="btnSwitchRoom" class="ml-1 text-xs px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition" title="切換或同步此房間">
+            切換
+          </button>
+        </div>
+
+        <!-- 桌面安裝提示按鈕 -->
+        <button id="btnInstallGuide" class="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition" title="如何在 Windows/Mac 固定於桌面？">
+          <i class="ph ph-desktop text-xl"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- 主日曆區塊 -->
+  <main class="max-w-7xl mx-auto w-full p-3 sm:p-6 flex-1 flex flex-col">
+    <!-- 連線與房間狀態狀態條 -->
+    <div class="mb-3 flex items-center justify-between text-xs text-slate-500 px-1">
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center gap-1.5">
+          <span id="syncDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span id="syncStatus">連線同步中...</span>
+        </span>
+        <span class="text-slate-300">|</span>
+        <span>當前共編空間：<strong id="currentRoomText" class="text-slate-700">team-work</strong>（與 Mac / Win 輸入相同代碼即刻雙向同步）</span>
+      </div>
+      <div class="hidden sm:block text-slate-400">
+        💡 點擊任意日期格子即可新增行程
+      </div>
+    </div>
+
+    <!-- 星期抬頭 -->
+    <div class="grid grid-cols-7 gap-px bg-slate-200 rounded-t-xl overflow-hidden border-t border-x border-slate-200 text-center text-xs font-semibold text-slate-600 bg-slate-100 py-2">
+      <div class="text-rose-600">日</div>
+      <div>一</div>
+      <div>二</div>
+      <div>三</div>
+      <div>四</div>
+      <div>五</div>
+      <div class="text-indigo-600">六</div>
+    </div>
+
+    <!-- 月曆網格容器 -->
+    <div id="calendarGrid" class="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-b-xl overflow-hidden shadow-sm flex-1 bg-slate-200">
+      <!-- 每日格子由 JS 動態生成 -->
+    </div>
+  </main>
+
+  <!-- 自訂背景設定 Modal -->
+  <div id="bgModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all flex flex-col max-h-[90vh]">
+      <!-- 標題列 -->
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center gap-2">
+          <div class="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+            <i class="ph ph-paint-brush-broad text-xl"></i>
+          </div>
+          <h3 class="font-bold text-slate-800 text-base">自訂背景與外觀風格</h3>
+        </div>
+        <button id="btnCloseBgModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i class="ph ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-5 text-xs">
+        <!-- 快速預設背景 -->
+        <div>
+          <label class="block font-semibold text-slate-700 mb-2">現代簡約色調預設</label>
+          <div class="grid grid-cols-5 gap-2">
+            <button class="h-8 rounded-lg border border-slate-300 bg-[#f8fafc] hover:scale-105 transition" onclick="applyPresetBg('color', '#f8fafc')" title="極簡白霧"></button>
+            <button class="h-8 rounded-lg border border-slate-300 bg-[#eff6ff] hover:scale-105 transition" onclick="applyPresetBg('color', '#eff6ff')" title="微風淺藍"></button>
+            <button class="h-8 rounded-lg border border-slate-300 bg-[#f0fdf4] hover:scale-105 transition" onclick="applyPresetBg('color', '#f0fdf4')" title="淡雅薄荷"></button>
+            <button class="h-8 rounded-lg border border-slate-300 bg-[#fffbeb] hover:scale-105 transition" onclick="applyPresetBg('color', '#fffbeb')" title="溫暖米白"></button>
+            <button class="h-8 rounded-lg border border-slate-300 bg-[#1e293b] hover:scale-105 transition" onclick="applyPresetBg('color', '#1e293b')" title="深色深邃灰"></button>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mt-2">
+            <button class="h-8 rounded-lg border border-slate-200 bg-gradient-to-r from-blue-100 to-indigo-100 hover:scale-105 transition font-medium text-[11px] text-slate-700" onclick="applyPresetBg('gradient', 'linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%)')">藍紫漸層</button>
+            <button class="h-8 rounded-lg border border-slate-200 bg-gradient-to-r from-emerald-100 to-teal-100 hover:scale-105 transition font-medium text-[11px] text-slate-700" onclick="applyPresetBg('gradient', 'linear-gradient(135deg, #d1fae5 0%, #ccfbf1 100%)')">青檸薄荷</button>
+            <button class="h-8 rounded-lg border border-slate-200 bg-gradient-to-r from-rose-100 to-orange-100 hover:scale-105 transition font-medium text-[11px] text-slate-700" onclick="applyPresetBg('gradient', 'linear-gradient(135deg, #ffe4e6 0%, #ffedd5 100%)')">朝霞柔橘</button>
+          </div>
+        </div>
+
+        <!-- 模式切換：純色 vs 圖片 -->
+        <div class="border-t border-slate-100 pt-4 space-y-3">
+          <label class="block font-semibold text-slate-700">自選單色背景</label>
+          <div class="flex items-center gap-3">
+            <input type="color" id="bgCustomColorPicker" value="#f8fafc" class="w-10 h-10 rounded-lg cursor-pointer border border-slate-300 p-0.5 bg-white">
+            <div class="flex-1">
+              <input type="text" id="bgCustomColorText" placeholder="#f8fafc" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-mono uppercase">
+            </div>
+            <button id="btnApplyCustomColor" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition">套用色彩</button>
+          </div>
+        </div>
+
+        <!-- 自選背景圖片 -->
+        <div class="border-t border-slate-100 pt-4 space-y-3">
+          <label class="block font-semibold text-slate-700">自訂桌布圖片（支援本機上傳或圖片網址）</label>
+          
+          <!-- 本機檔案上傳 -->
+          <div>
+            <label class="block text-slate-500 mb-1 text-[11px]">從電腦挑選圖片：</label>
+            <input type="file" id="bgFileInput" accept="image/*" class="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
+          </div>
+
+          <!-- 或輸入圖片網址 -->
+          <div class="pt-1">
+            <label class="block text-slate-500 mb-1 text-[11px]">或輸入圖片網址 (URL)：</label>
+            <div class="flex gap-2">
+              <input type="url" id="bgUrlInput" placeholder="https://images.unsplash.com/..." class="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs">
+              <button id="btnApplyBgUrl" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium transition">套用網址</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 毛玻璃模糊度與遮罩調整 (防止文字看不清楚) -->
+        <div class="border-t border-slate-100 pt-4 space-y-3 bg-slate-50 p-3 rounded-xl">
+          <div class="font-semibold text-slate-700 flex items-center justify-between">
+            <span>文字清晰度調整（遮罩與模糊）</span>
+          </div>
+
+          <!-- 遮罩透明度 -->
+          <div>
+            <div class="flex justify-between text-[11px] text-slate-500 mb-1">
+              <span>白色遮罩濃度（數值越高越清晰）</span>
+              <span id="overlayOpacityVal" class="font-mono">75%</span>
+            </div>
+            <input type="range" id="overlayOpacityRange" min="0" max="95" value="75" class="w-full accent-indigo-600">
+          </div>
+
+          <!-- 背景模糊 (Blur) -->
+          <div>
+            <div class="flex justify-between text-[11px] text-slate-500 mb-1">
+              <span>背景模糊 (Blur)</span>
+              <span id="bgBlurVal" class="font-mono">0px</span>
+            </div>
+            <input type="range" id="bgBlurRange" min="0" max="25" value="0" class="w-full accent-indigo-600">
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部按鈕 -->
+      <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+        <button id="btnResetDefaultBg" class="text-rose-600 hover:text-rose-700 font-medium text-xs flex items-center gap-1">
+          <i class="ph ph-arrow-counter-clockwise"></i> 恢復預設背景
+        </button>
+        <button id="btnDoneBgModal" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-xs shadow-xs transition">
+          完成設定
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 自訂字體與文字大小 Modal (新增) -->
+  <div id="fontModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all flex flex-col">
+      <!-- 標題列 -->
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center gap-2">
+          <div class="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+            <i class="ph ph-text-aa text-xl"></i>
+          </div>
+          <h3 class="font-bold text-slate-800 text-base">字體風格與文字大小設定</h3>
+        </div>
+        <button id="btnCloseFontModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i class="ph ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-5 text-xs">
+        <!-- 字型族群選擇 -->
+        <div>
+          <label class="block font-semibold text-slate-700 mb-2">字體種類 (Font Family)</label>
+          <div class="grid grid-cols-2 gap-2" id="fontFamilySelector">
+            <button type="button" data-font="sans" class="font-btn p-3 rounded-xl border border-slate-200 text-left hover:border-indigo-500 transition active bg-indigo-50/50 border-indigo-400">
+              <span class="block text-sm font-semibold text-slate-800" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">現代黑體 (預設)</span>
+              <span class="text-[11px] text-slate-500">俐落現代，最清晰</span>
+            </button>
+            <button type="button" data-font="serif" class="font-btn p-3 rounded-xl border border-slate-200 text-left hover:border-indigo-500 transition">
+              <span class="block text-sm font-semibold text-slate-800" style="font-family: 'Songti TC', 'Noto Serif TC', Georgia, serif;">典雅明體 / 襯線</span>
+              <span class="text-[11px] text-slate-500">書卷質感，細緻優雅</span>
+            </button>
+            <button type="button" data-font="rounded" class="font-btn p-3 rounded-xl border border-slate-200 text-left hover:border-indigo-500 transition">
+              <span class="block text-sm font-semibold text-slate-800" style="font-family: 'Quicksand', 'PingFang TC', sans-serif;">柔和圓體 / 圓潤</span>
+              <span class="text-[11px] text-slate-500">溫和親切，舒適減壓</span>
+            </button>
+            <button type="button" data-font="mono" class="font-btn p-3 rounded-xl border border-slate-200 text-left hover:border-indigo-500 transition">
+              <span class="block text-sm font-semibold text-slate-800" style="font-family: 'SF Mono', Consolas, Monaco, monospace;">工程等寬 (Monospace)</span>
+              <span class="text-[11px] text-slate-500">整齊規整，對齊極佳</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 整體文字大小縮放滑桿 -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+          <div class="flex justify-between items-center text-slate-700">
+            <span class="font-semibold">整體文字縮放比例</span>
+            <span id="fontSizeDisplay" class="font-mono text-indigo-600 font-bold bg-white px-2 py-0.5 rounded border border-slate-200">100%</span>
+          </div>
+          <input type="range" id="fontSizeRange" min="80" max="140" step="5" value="100" class="w-full accent-indigo-600 cursor-pointer">
+          <div class="flex justify-between text-[10px] text-slate-400">
+            <span>80% (精巧小字)</span>
+            <span>100% (標準預設)</span>
+            <span>140% (清晰大字)</span>
+          </div>
+        </div>
+
+        <!-- 行程文字粗細切換 -->
+        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+          <div>
+            <span class="block font-semibold text-slate-700">行程文字加粗 (Bold)</span>
+            <span class="text-[11px] text-slate-500">讓桌面月曆格子中的活動名稱更加醒目</span>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="boldTextCheckbox" class="sr-only peer">
+            <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+
+        <!-- 即時效果預覽區塊 -->
+        <div class="border border-slate-200 p-3 rounded-xl bg-white space-y-1">
+          <span class="block text-[11px] text-slate-400 font-medium">即時效果預覽：</span>
+          <div id="fontPreviewBox" class="p-2 rounded bg-indigo-50 border border-indigo-100 flex items-center justify-between text-indigo-900">
+            <span id="previewText">14:30 團隊週會報告與進度追蹤</span>
+            <span class="text-[10px] bg-indigo-200/80 px-1.5 py-0.5 rounded font-mono">11月3日</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部按鈕 -->
+      <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+        <button id="btnResetFont" class="text-rose-600 hover:text-rose-700 font-medium text-xs flex items-center gap-1">
+          <i class="ph ph-arrow-counter-clockwise"></i> 恢復預設字體
+        </button>
+        <button id="btnDoneFontModal" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-xs shadow-xs transition">
+          完成設定
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增/編輯行程 Modal 視窗 -->
+  <div id="eventModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all">
+      <!-- Modal 標題列 -->
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center gap-2">
+          <div id="modalColorBadge" class="w-3 h-3 rounded-full bg-blue-500"></div>
+          <h3 id="modalTitle" class="font-semibold text-slate-800 text-base">新增行程</h3>
+        </div>
+        <button id="btnCloseModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i class="ph ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <!-- 表單內容 -->
+      <form id="eventForm" class="p-6 space-y-4">
+        <input type="hidden" id="eventId">
+        <input type="hidden" id="eventDate">
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">目標日期</label>
+          <div id="modalDateDisplay" class="text-sm font-semibold text-indigo-700 bg-indigo-50/60 px-3 py-2 rounded-lg border border-indigo-100">
+            2026-11-03
+          </div>
+        </div>
+
+        <div>
+          <label for="eventTitleInput" class="block text-xs font-medium text-slate-600 mb-1">行程名稱 <span class="text-rose-500">*</span></label>
+          <input type="text" id="eventTitleInput" required placeholder="例如：專案里程碑討論、交付簡報..." 
+                 class="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="eventTimeInput" class="block text-xs font-medium text-slate-600 mb-1">時間 (可選)</label>
+            <input type="time" id="eventTimeInput" 
+                   class="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-medium text-slate-600">自訂分類標籤</label>
+              <button type="button" id="btnQuickOpenCatModal" class="text-[11px] text-indigo-600 hover:underline flex items-center gap-0.5">
+                <i class="ph ph-gear"></i> 管理
+              </button>
+            </div>
+            <select id="eventCategorySelect" class="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+              <!-- 動態由 customCategories 填充 -->
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label for="eventNotesInput" class="block text-xs font-medium text-slate-600 mb-1">備註說明 (可選)</label>
+          <textarea id="eventNotesInput" rows="2" placeholder="相關連結、會議室地點或事項說明..." 
+                    class="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"></textarea>
+        </div>
+
+        <!-- 操作按鈕 -->
+        <div class="pt-2 flex items-center justify-between border-t border-slate-100">
+          <button type="button" id="btnDeleteEvent" class="text-xs px-3 py-2 font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition hidden">
+            <i class="ph ph-trash text-sm mr-1"></i>刪除行程
+          </button>
+          <div class="flex items-center gap-2 ml-auto">
+            <button type="button" id="btnCancelModal" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">
+              取消
+            </button>
+            <button type="submit" class="px-4 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow transition">
+              儲存行程
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 桌面安裝/設定提示 Modal -->
+  <div id="guideModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden p-6 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+            <i class="ph ph-laptop text-xl"></i>
+          </div>
+          <h3 class="font-bold text-slate-800 text-base">如何常駐在 Windows 與 Mac 桌面？</h3>
+        </div>
+        <button id="btnCloseGuideModal" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="ph ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3.5 text-xs text-slate-600 leading-relaxed">
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+          <div class="font-semibold text-slate-800 flex items-center gap-1.5 mb-1 text-sm">
+            <i class="ph ph-windows-logo text-blue-600"></i> Windows 電腦（Chrome / Edge）：
+          </div>
+          <ol class="list-decimal list-inside space-y-1 pl-1">
+            <li>在瀏覽器右上角點擊「三個點選單 <span class="font-mono">⋮</span>」。</li>
+            <li>選擇 <strong>「儲存與共用」</strong> $\rightarrow$ 點擊 <strong>「安裝為應用程式」</strong>（或「建立捷徑」並勾選<strong>以視窗開啟</strong>）。</li>
+            <li>完成後，這款日曆就會像一般獨立軟體一樣常駐在您的工作列與桌面上！</li>
+          </ol>
+        </div>
+
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+          <div class="font-semibold text-slate-800 flex items-center gap-1.5 mb-1 text-sm">
+            <i class="ph ph-apple-logo text-slate-800"></i> 蘋果電腦（Mac Safari / Chrome）：
+          </div>
+          <ol class="list-decimal list-inside space-y-1 pl-1">
+            <li><strong>Safari</strong>：點擊上方選單列「檔案」$\rightarrow$ <strong>「加入 Dock」</strong>。</li>
+            <li><strong>Chrome</strong>：點擊右上角選單 $\rightarrow$「儲存與共用」$\rightarrow$ <strong>「安裝為應用程式」</strong>。</li>
+            <li>可隨時在 Dock 點開，獨立無網址列視窗，完全不干擾其他分頁。</li>
+          </ol>
+        </div>
+
+        <div class="bg-indigo-50/70 p-3 rounded-xl border border-indigo-100 text-indigo-900">
+          <strong class="font-semibold block mb-0.5">👥 跨電腦共編提示：</strong>
+          只要兩台電腦右上角的「房間代碼（Room）」維持一致（例如：<code class="bg-white px-1.5 py-0.5 rounded border border-indigo-200">my-work-room</code>），任一端新增或修改行程，另一端在數毫秒內即時更新！
+        </div>
+      </div>
+
+      <div class="pt-2 text-right">
+        <button id="btnGotItGuide" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-medium">
+          了解，開始使用
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 自訂標籤管理 Modal -->
+  <div id="categoryModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden p-6 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+            <i class="ph ph-palette text-xl"></i>
+          </div>
+          <h3 class="font-bold text-slate-800 text-base">自訂標籤分類與色彩</h3>
+        </div>
+        <button id="btnCloseCatModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i class="ph ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-500">
+        在此房間定義的標籤與自選顏色將即時同步給所有使用同房間的裝置（Windows & Mac）。
+      </p>
+
+      <!-- 新增標籤輸入區 -->
+      <div class="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+        <input type="color" id="newCatColor" value="#3b82f6" class="w-8 h-8 rounded-lg cursor-pointer border border-slate-300 bg-white p-0.5" title="選擇標籤顏色">
+        <input type="text" id="newCatName" placeholder="輸入新標籤名稱 (如: 業務拜訪)" class="flex-1 text-xs px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <button type="button" id="btnAddCategory" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition flex items-center gap-1">
+          <i class="ph ph-plus"></i> 新增
+        </button>
+      </div>
+
+      <!-- 現有標籤清單 -->
+      <div class="max-h-60 overflow-y-auto space-y-2 pr-1" id="categoryListContainer">
+        <!-- 動態渲染清單 -->
+      </div>
+
+      <div class="pt-2 text-right border-t border-slate-100">
+        <button type="button" id="btnDoneCategory" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-medium">
+          完成
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase 與業務邏輯 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // 預設標籤資料（當房間無自訂資料時使用）
+    const DEFAULT_CATEGORIES = [
+      { id: 'cat_blue', name: '工作常規', color: '#3b82f6' },
+      { id: 'cat_emerald', name: '會議商討', color: '#10b981' },
+      { id: 'cat_amber', name: '待辦重點', color: '#f59e0b' },
+      { id: 'cat_rose', name: '緊急重要', color: '#f43f5e' },
+      { id: 'cat_purple', name: '專案進度', color: '#8b5cf6' },
+      { id: 'cat_gray', name: '備註雜項', color: '#64748b' }
+    ];
+
+    // 應用狀態
+    let currentDate = new Date();
+    let currentRoom = "team-work";
+    let eventsList = []; // 當前房間取得的所有行程
+    let customCategories = [...DEFAULT_CATEGORIES]; // 當前房間的自訂分類標籤
+    let unsubscribeEvents = null;
+    let unsubscribeCategories = null;
+    let authUser = null;
+
+    // 自訂背景偏好設定結構
+    let bgConfig = {
+      type: 'color', // 'color', 'gradient', 'image'
+      value: '#f8fafc',
+      overlayOpacity: 75,
+      blur: 0
+    };
+
+    // 自訂字體與文字大小偏好設定 (新增)
+    let fontConfig = {
+      family: 'sans', // 'sans', 'serif', 'rounded', 'mono'
+      scale: 100,     // 80 ~ 140
+      bold: false     // boolean
+    };
+
+    const FONT_MAP = {
+      sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC', sans-serif",
+      serif: "'Songti TC', 'Noto Serif TC', 'Source Han Serif TC', Georgia, serif",
+      rounded: "'Quicksand', 'PingFang TC', 'Microsoft JhengHei', sans-serif",
+      mono: "'SF Mono', Consolas, Monaco, 'Courier New', monospace"
+    };
+
+    // Firebase 初始化設定
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'worksync-calendar';
+    let db = null;
+    let auth = null;
+
+    if (typeof __firebase_config !== 'undefined') {
+      try {
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+      } catch (err) {
+        console.warn("Firebase 初始化錯誤:", err);
+      }
+    }
+
+    // 初始化認證與即時監聽
+    async function initAuthAndData() {
+      const syncDot = document.getElementById('syncDot');
+      const syncStatus = document.getElementById('syncStatus');
+
+      if (!db || !auth) {
+        syncStatus.textContent = "單機模式 (未配置雲端參數)";
+        syncDot.className = "w-2 h-2 rounded-full bg-slate-400";
+        updateCategoryDropdowns();
+        renderCalendar();
+        return;
+      }
+
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+        authUser = auth.currentUser;
+        syncStatus.textContent = "已連線至雲端即時同步";
+        syncDot.className = "w-2 h-2 rounded-full bg-emerald-500";
+        listenToRoomData(currentRoom);
+      } catch (error) {
+        console.error("Auth error:", error);
+        syncStatus.textContent = "連線異常，正在使用本地模式";
+        syncDot.className = "w-2 h-2 rounded-full bg-rose-500";
+        updateCategoryDropdowns();
+        renderCalendar();
+      }
+    }
+
+    // 監聽特定房間的行程與標籤
+    function listenToRoomData(roomId) {
+      if (!db || !authUser) return;
+
+      if (unsubscribeEvents) unsubscribeEvents();
+      if (unsubscribeCategories) unsubscribeCategories();
+
+      const syncDot = document.getElementById('syncDot');
+      const syncStatus = document.getElementById('syncStatus');
+      syncDot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse";
+      syncStatus.textContent = `同步 ${roomId} 中...`;
+
+      // 監聽自訂標籤 (Rule 1 & 2)
+      const catCol = collection(db, 'artifacts', appId, 'public', 'data', 'calendar_categories');
+      unsubscribeCategories = onSnapshot(catCol, (snapshot) => {
+        const cats = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data && data.room === roomId) {
+            cats.push({ id: doc.id, ...data });
+          }
+        });
+        if (cats.length > 0) {
+          customCategories = cats;
+        } else {
+          // 若無資料，自動將預設標籤初始化到該房間
+          customCategories = [...DEFAULT_CATEGORIES];
+          DEFAULT_CATEGORIES.forEach(c => {
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'calendar_categories', `${roomId}_${c.id}`);
+            setDoc(docRef, { ...c, room: roomId }).catch(console.error);
+          });
+        }
+        updateCategoryDropdowns();
+        renderCalendar();
+        renderCategoryManagerList();
+      }, (err) => console.error("Cat snapshot err:", err));
+
+      // 監聽行程
+      const eventsCol = collection(db, 'artifacts', appId, 'public', 'data', 'calendar_events');
+      unsubscribeEvents = onSnapshot(eventsCol, (snapshot) => {
+        const items = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data && data.room === roomId) {
+            items.push({ id: doc.id, ...data });
+          }
+        });
+        eventsList = items;
+        syncDot.className = "w-2 h-2 rounded-full bg-emerald-500";
+        syncStatus.textContent = `已即時同步（${items.length} 筆事項）`;
+        renderCalendar();
+      }, (err) => {
+        console.error("Events snapshot error:", err);
+        syncDot.className = "w-2 h-2 rounded-full bg-rose-500";
+      });
+    }
+
+    // 更新頂部篩選器與表單標籤下拉選項
+    function updateCategoryDropdowns() {
+      const filterSelect = document.getElementById('filterCategory');
+      const eventCatSelect = document.getElementById('eventCategorySelect');
+      const currentFilter = filterSelect.value;
+      const currentSelectedCat = eventCatSelect.value;
+
+      filterSelect.innerHTML = '<option value="ALL">全部標籤類別</option>';
+      eventCatSelect.innerHTML = '';
+
+      customCategories.forEach(cat => {
+        // 篩選器
+        const optFilter = document.createElement('option');
+        optFilter.value = cat.id;
+        optFilter.textContent = `● ${cat.name}`;
+        filterSelect.appendChild(optFilter);
+
+        // 表單選擇
+        const optEvent = document.createElement('option');
+        optEvent.value = cat.id;
+        optEvent.textContent = cat.name;
+        eventCatSelect.appendChild(optEvent);
+      });
+
+      if (customCategories.some(c => c.id === currentFilter)) {
+        filterSelect.value = currentFilter;
+      } else {
+        filterSelect.value = "ALL";
+      }
+
+      if (customCategories.some(c => c.id === currentSelectedCat)) {
+        eventCatSelect.value = currentSelectedCat;
+      }
+    }
+
+    // 根據標籤 ID 取得顏色與名稱
+    function getCategoryInfo(categoryId) {
+      const found = customCategories.find(c => c.id === categoryId);
+      if (found) return found;
+      // 容錯兼容舊色票鍵值
+      const legacyMap = {
+        blue: { name: '工作常規', color: '#3b82f6' },
+        emerald: { name: '會議商討', color: '#10b981' },
+        amber: { name: '待辦重點', color: '#f59e0b' },
+        rose: { name: '緊急重要', color: '#f43f5e' },
+        purple: { name: '專案進度', color: '#8b5cf6' },
+        gray: { name: '備註雜項', color: '#64748b' }
+      };
+      return legacyMap[categoryId] || { name: '未分類', color: '#64748b' };
+    }
+
+    // 十六進制色彩轉淺色背景 (rgba)
+    function hexToRgba(hex, alpha = 0.12) {
+      let c = hex.replace('#', '');
+      if (c.length === 3) c = c.split('').map(x => x + x).join('');
+      const num = parseInt(c, 16);
+      const r = (num >> 16) & 255;
+      const g = (num >> 8) & 255;
+      const b = num & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    // 渲染日曆視圖
+    function renderCalendar() {
+      const grid = document.getElementById('calendarGrid');
+      const monthLabel = document.getElementById('currentMonthYearLabel');
+      const filterCategory = document.getElementById('filterCategory').value;
+
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+
+      const monthNames = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
+      monthLabel.textContent = `${year}年 ${monthNames[month]}`;
+
+      grid.innerHTML = '';
+
+      const firstDayIndex = new Date(year, month, 1).getDay();
+      const totalDays = new Date(year, month + 1, 0).getDate();
+      const prevMonthLastDate = new Date(year, month, 0).getDate();
+      const totalCells = Math.ceil((firstDayIndex + totalDays) / 7) * 7;
+
+      const today = new Date();
+      const isCurrentMonthActual = today.getFullYear() === year && today.getMonth() === month;
+      const todayDateNumber = today.getDate();
+
+      for (let i = 0; i < totalCells; i++) {
+        const cell = document.createElement('div');
+        cell.className = "bg-white flex flex-col p-1.5 sm:p-2.5 transition hover:bg-slate-50 cursor-pointer grid-cell relative group";
+
+        let dateStr = "";
+        let dayNum = 0;
+        let isCurrentMonth = false;
+
+        if (i < firstDayIndex) {
+          dayNum = prevMonthLastDate - firstDayIndex + i + 1;
+          const pMonth = month === 0 ? 12 : month;
+          const pYear = month === 0 ? year - 1 : year;
+          dateStr = `${pYear}-${String(pMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+          cell.classList.add('bg-slate-50/50', 'text-slate-300');
+        } else if (i >= firstDayIndex + totalDays) {
+          dayNum = i - (firstDayIndex + totalDays) + 1;
+          const nMonth = month === 11 ? 1 : month + 2;
+          const nYear = month === 11 ? year + 1 : year;
+          dateStr = `${nYear}-${String(nMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+          cell.classList.add('bg-slate-50/50', 'text-slate-300');
+        } else {
+          dayNum = i - firstDayIndex + 1;
+          dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+          isCurrentMonth = true;
+          cell.classList.add('text-slate-700');
+        }
+
+        const isToday = isCurrentMonthActual && isCurrentMonth && dayNum === todayDateNumber;
+
+        const headerDiv = document.createElement('div');
+        headerDiv.className = "flex items-center justify-between mb-1";
+
+        const numSpan = document.createElement('span');
+        numSpan.className = `text-xs font-semibold rounded-full w-6 h-6 flex items-center justify-center ${
+          isToday ? 'bg-indigo-600 text-white font-bold shadow-xs' : isCurrentMonth ? 'text-slate-700' : 'text-slate-400'
+        }`;
+        numSpan.textContent = dayNum;
+        headerDiv.appendChild(numSpan);
+
+        const addHint = document.createElement('span');
+        addHint.className = "text-[11px] text-indigo-500 opacity-0 group-hover:opacity-100 transition hidden sm:inline";
+        addHint.innerHTML = '<i class="ph ph-plus"></i>';
+        headerDiv.appendChild(addHint);
+
+        cell.appendChild(headerDiv);
+
+        const eventsContainer = document.createElement('div');
+        eventsContainer.className = "flex-1 overflow-y-auto space-y-1 max-h-[75px] sm:max-h-[90px]";
+
+        const dayEvents = eventsList.filter(ev => {
+          if (ev.date !== dateStr) return false;
+          if (filterCategory !== 'ALL' && ev.categoryId !== filterCategory && ev.color !== filterCategory) return false;
+          return true;
+        });
+
+        dayEvents.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+
+        dayEvents.forEach(ev => {
+          const cat = getCategoryInfo(ev.categoryId || ev.color);
+          const evItem = document.createElement('div');
+          const boldCls = fontConfig.bold ? 'font-bold' : 'font-medium';
+          evItem.className = `text-[10px] sm:text-xs px-1.5 py-1 rounded border flex items-center gap-1 ${boldCls} truncate shadow-2xs cursor-pointer hover:brightness-95 transition`;
+          
+          // 動態應用自選顏色
+          evItem.style.backgroundColor = hexToRgba(cat.color, 0.12);
+          evItem.style.borderColor = hexToRgba(cat.color, 0.35);
+          evItem.style.color = cat.color;
+
+          evItem.title = `[${cat.name}] ${ev.time ? ev.time + ' ' : ''}${ev.title}${ev.notes ? '\n' + ev.notes : ''}`;
+
+          const dot = document.createElement('span');
+          dot.className = "w-1.5 h-1.5 rounded-full shrink-0";
+          dot.style.backgroundColor = cat.color;
+
+          const titleSpan = document.createElement('span');
+          titleSpan.className = "truncate";
+          titleSpan.textContent = `${ev.time ? ev.time + ' ' : ''}${ev.title}`;
+
+          evItem.appendChild(dot);
+          evItem.appendChild(titleSpan);
+
+          evItem.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEventModal({
+              id: ev.id,
+              date: ev.date,
+              title: ev.title,
+              time: ev.time || '',
+              categoryId: ev.categoryId || ev.color || customCategories[0]?.id,
+              notes: ev.notes || ''
+            });
+          });
+
+          eventsContainer.appendChild(evItem);
+        });
+
+        cell.appendChild(eventsContainer);
+
+        cell.addEventListener('click', () => {
+          openEventModal({
+            id: null,
+            date: dateStr,
+            title: '',
+            time: '',
+            categoryId: customCategories[0]?.id,
+            notes: ''
+          });
+        });
+
+        grid.appendChild(cell);
+      }
+    }
+
+    // 開啟編輯/新增視窗
+    function openEventModal(eventData) {
+      const modal = document.getElementById('eventModal');
+      const modalTitle = document.getElementById('modalTitle');
+      const dateDisplay = document.getElementById('modalDateDisplay');
+      const eventIdInput = document.getElementById('eventId');
+      const eventDateInput = document.getElementById('eventDate');
+      const titleInput = document.getElementById('eventTitleInput');
+      const timeInput = document.getElementById('eventTimeInput');
+      const notesInput = document.getElementById('eventNotesInput');
+      const deleteBtn = document.getElementById('btnDeleteEvent');
+      const eventCatSelect = document.getElementById('eventCategorySelect');
+
+      eventIdInput.value = eventData.id || '';
+      eventDateInput.value = eventData.date;
+      dateDisplay.textContent = eventData.date;
+      titleInput.value = eventData.title;
+      timeInput.value = eventData.time;
+      notesInput.value = eventData.notes;
+
+      if (eventData.categoryId) {
+        eventCatSelect.value = eventData.categoryId;
+      } else if (customCategories.length > 0) {
+        eventCatSelect.value = customCategories[0].id;
+      }
+
+      updateModalBadge(eventCatSelect.value);
+
+      if (eventData.id) {
+        modalTitle.textContent = "編輯行程";
+        deleteBtn.classList.remove('hidden');
+      } else {
+        modalTitle.textContent = "新增行程";
+        deleteBtn.classList.add('hidden');
+      }
+
+      modal.classList.remove('hidden');
+      setTimeout(() => titleInput.focus(), 50);
+    }
+
+    function closeModal() {
+      document.getElementById('eventModal').classList.add('hidden');
+    }
+
+    function updateModalBadge(catId) {
+      const badge = document.getElementById('modalColorBadge');
+      const cat = getCategoryInfo(catId);
+      badge.style.backgroundColor = cat.color;
+    }
+
+    // 儲存行程
+    async function handleSaveEvent(e) {
+      e.preventDefault();
+      const id = document.getElementById('eventId').value || ('ev_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+      const date = document.getElementById('eventDate').value;
+      const title = document.getElementById('eventTitleInput').value.trim();
+      const time = document.getElementById('eventTimeInput').value;
+      const notes = document.getElementById('eventNotesInput').value.trim();
+      const categoryId = document.getElementById('eventCategorySelect').value;
+
+      if (!title) return;
+
+      const payload = {
+        room: currentRoom,
+        date,
+        title,
+        time,
+        categoryId,
+        notes,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (db && authUser) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'calendar_events', id);
+          await setDoc(docRef, payload);
+        } catch (err) {
+          console.error("儲存行程錯誤:", err);
+        }
+      } else {
+        const existingIdx = eventsList.findIndex(x => x.id === id);
+        if (existingIdx >= 0) {
+          eventsList[existingIdx] = { id, ...payload };
+        } else {
+          eventsList.push({ id, ...payload });
+        }
+        renderCalendar();
+      }
+
+      closeModal();
+    }
+
+    // 刪除行程
+    async function handleDeleteEvent() {
+      const id = document.getElementById('eventId').value;
+      if (!id) return;
+
+      if (db && authUser) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'calendar_events', id);
+          await deleteDoc(docRef);
+        } catch (err) {
+          console.error("刪除失敗:", err);
+        }
+      } else {
+        eventsList = eventsList.filter(x => x.id !== id);
+        renderCalendar();
+      }
+
+      closeModal();
+    }
+
+    // --- 自訂標籤管理邏輯 ---
+    function openCategoryModal() {
+      renderCategoryManagerList();
+      document.getElementById('categoryModal').classList.remove('hidden');
+    }
+
+    function closeCategoryModal() {
+      document.getElementById('categoryModal').classList.add('hidden');
+    }
+
+    function renderCategoryManagerList() {
+      const container = document.getElementById('categoryListContainer');
+      container.innerHTML = '';
+
+      customCategories.forEach(cat => {
+        const row = document.createElement('div');
+        row.className = "flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200/80 text-xs";
+
+        const left = document.createElement('div');
+        left.className = "flex items-center gap-2 flex-1 mr-2";
+
+        // 即時變更顏色輸入框
+        const colorInput = document.createElement('input');
+        colorInput.type = "color";
+        colorInput.value = cat.color;
+        colorInput.className = "w-6 h-6 rounded cursor-pointer border border-slate-300 p-0 bg-white shrink-0";
+        colorInput.addEventListener('change', async (e) => {
+          await updateCategory(cat.id, { color: e.target.value });
+        });
+
+        // 標籤名稱編輯輸入框
+        const nameInput = document.createElement('input');
+        nameInput.type = "text";
+        nameInput.value = cat.name;
+        nameInput.className = "w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white px-1 py-0.5 rounded text-slate-700 font-medium focus:outline-none transition";
+        nameInput.addEventListener('change', async (e) => {
+          const newName = e.target.value.trim();
+          if (newName) {
+            await updateCategory(cat.id, { name: newName });
+          }
+        });
+
+        left.appendChild(colorInput);
+        left.appendChild(nameInput);
+
+        // 刪除按鈕 (保留至少一個標籤避免空選)
+        const delBtn = document.createElement('button');
+        delBtn.type = "button";
+        delBtn.className = "p-1.5 text-slate-400 hover:text-rose-600 rounded transition";
+        delBtn.title = "刪除此標籤";
+        delBtn.innerHTML = '<i class="ph ph-trash text-sm"></i>';
+        delBtn.addEventListener('click', async () => {
+          if (customCategories.length <= 1) {
+            alert("請至少保留一個分類標籤。");
+            return;
+          }
+          await deleteCategory(cat.id);
+        });
+
+        row.appendChild(left);
+        row.appendChild(delBtn);
+        container.appendChild(row);
+      });
+    }
+
+    async function handleAddCategory() {
+      const nameInput = document.getElementById('newCatName');
+      const colorInput = document.getElementById('newCatColor');
+      const name = nameInput.value.trim();
+      const color = colorInput.value;
+
+      if (!name) return;
+
+      const catId = 'cat_' + Date.now();
+      const newCat = { id: catId, name, color, room: currentRoom };
+
+      if (db && authUser) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'calendar_categories', `${currentRoom}_${catId}`);
+          await setDoc(docRef, newCat);
+        } catch (err) {
+          console.error("新增標籤失敗:", err);
+        }
+      } else {
+        customCategories.push(newCat);
+        updateCategoryDropdowns();
+        renderCategoryManagerList();
+        renderCalendar();
+      }
+
+      nameInput.value = '';
+    }
+
+    async function updateCategory(catId, updates) {
+      if (db && authUser) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'calendar_categories', `${currentRoom}_${catId}`);
+          const existing = customCategories.find(c => c.id === catId);
+          await setDoc(docRef, { ...existing, ...updates, room: currentRoom });
+        } catch (err) {
+          console.error("更新標籤失敗:", err);
+        }
+      } else {
+        const idx = customCategories.findIndex(c => c.id === catId);
+        if (idx >= 0) {
+          customCategories[idx] = { ...customCategories[idx], ...updates };
+          updateCategoryDropdowns();
+          renderCalendar();
+          renderCategoryManagerList();
+        }
+      }
+    }
+
+    async function deleteCategory(catId) {
+      if (db && authUser) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'calendar_categories', `${currentRoom}_${catId}`);
+          await deleteDoc(docRef);
+        } catch (err) {
+          console.error("刪除標籤失敗:", err);
+        }
+      } else {
+        customCategories = customCategories.filter(c => c.id !== catId);
+        updateCategoryDropdowns();
+        renderCalendar();
+        renderCategoryManagerList();
+      }
+    }
+
+    // --- 背景與外觀自訂管理邏輯 ---
+    function initBackground() {
+      // 讀取本機暫存偏好
+      try {
+        const saved = localStorage.getItem('worksync_bg_config');
+        if (saved) {
+          bgConfig = JSON.parse(saved);
+        }
+      } catch (e) {
+        console.warn("無法存取 localStorage 背景偏好");
+      }
+      applyBackgroundStyles();
+    }
+
+    function saveBackgroundConfig() {
+      try {
+        localStorage.setItem('worksync_bg_config', JSON.stringify(bgConfig));
+      } catch (e) {
+        console.warn("儲存背景失敗");
+      }
+    }
+
+    function applyBackgroundStyles() {
+      const bgContainer = document.getElementById('customBgContainer');
+      const bgOverlay = document.getElementById('customBgOverlay');
+      const opacityRange = document.getElementById('overlayOpacityRange');
+      const blurRange = document.getElementById('bgBlurRange');
+      const opacityVal = document.getElementById('overlayOpacityVal');
+      const blurVal = document.getElementById('bgBlurVal');
+
+      // 套用遮罩濃度與模糊
+      const alpha = (bgConfig.overlayOpacity ?? 75) / 100;
+      bgOverlay.style.backgroundColor = `rgba(248, 250, 252, ${alpha})`;
+      bgContainer.style.filter = `blur(${bgConfig.blur || 0}px)`;
+
+      // 套用背景種類
+      if (bgConfig.type === 'color') {
+        bgContainer.style.backgroundImage = 'none';
+        bgContainer.style.backgroundColor = bgConfig.value;
+      } else if (bgConfig.type === 'gradient') {
+        bgContainer.style.backgroundImage = bgConfig.value;
+      } else if (bgConfig.type === 'image') {
+        bgContainer.style.backgroundColor = 'transparent';
+        bgContainer.style.backgroundImage = `url("${bgConfig.value}")`;
+      }
+
+      // 同步 UI 控制項數值
+      if (opacityRange) opacityRange.value = bgConfig.overlayOpacity ?? 75;
+      if (blurRange) blurRange.value = bgConfig.blur ?? 0;
+      if (opacityVal) opacityVal.textContent = `${bgConfig.overlayOpacity ?? 75}%`;
+      if (blurVal) blurVal.textContent = `${bgConfig.blur ?? 0}px`;
+
+      saveBackgroundConfig();
+    }
+
+    // 暴露給 HTML onclick 調用
+    window.applyPresetBg = function(type, value) {
+      bgConfig.type = type;
+      bgConfig.value = value;
+      if (type === 'image') {
+        bgConfig.overlayOpacity = Math.max(bgConfig.overlayOpacity, 60);
+      }
+      applyBackgroundStyles();
+    };
+
+    function openBgModal() {
+      const modal = document.getElementById('bgModal');
+      const colorPicker = document.getElementById('bgCustomColorPicker');
+      const colorText = document.getElementById('bgCustomColorText');
+      if (bgConfig.type === 'color' && bgConfig.value.startsWith('#')) {
+        colorPicker.value = bgConfig.value;
+        colorText.value = bgConfig.value;
+      }
+      modal.classList.remove('hidden');
+    }
+
+    function closeBgModal() {
+      document.getElementById('bgModal').classList.add('hidden');
+    }
+
+    // --- 自訂字體與大小管理邏輯 (新增) ---
+    function initFontSettings() {
+      try {
+        const saved = localStorage.getItem('worksync_font_config');
+        if (saved) {
+          fontConfig = { ...fontConfig, ...JSON.parse(saved) };
+        }
+      } catch (e) {
+        console.warn("無法讀取字體設定");
+      }
+      applyFontStyles();
+    }
+
+    function saveFontSettings() {
+      try {
+        localStorage.setItem('worksync_font_config', JSON.stringify(fontConfig));
+      } catch (e) {
+        console.warn("無法儲存字體設定");
+      }
+    }
+
+    function applyFontStyles() {
+      const selectedFont = FONT_MAP[fontConfig.family] || FONT_MAP.sans;
+      document.body.style.fontFamily = selectedFont;
+
+      // 透過根元素 font-size 達成全局等比縮放
+      const scalePercent = (fontConfig.scale || 100);
+      document.documentElement.style.fontSize = `${(scalePercent / 100) * 16}px`;
+
+      // 同步 Modal 控制項外觀
+      const scaleRange = document.getElementById('fontSizeRange');
+      const scaleDisplay = document.getElementById('fontSizeDisplay');
+      const boldCheckbox = document.getElementById('boldTextCheckbox');
+      const previewBox = document.getElementById('fontPreviewBox');
+      const previewText = document.getElementById('previewText');
+
+      if (scaleRange) scaleRange.value = fontConfig.scale;
+      if (scaleDisplay) scaleDisplay.textContent = `${fontConfig.scale}%`;
+      if (boldCheckbox) boldCheckbox.checked = !!fontConfig.bold;
+
+      if (previewBox && previewText) {
+        previewBox.style.fontFamily = selectedFont;
+        if (fontConfig.bold) {
+          previewText.classList.add('font-bold');
+        } else {
+          previewText.classList.remove('font-bold');
+        }
+      }
+
+      // 更新字型按鈕選取樣式
+      document.querySelectorAll('#fontFamilySelector .font-btn').forEach(btn => {
+        if (btn.getAttribute('data-font') === fontConfig.family) {
+          btn.classList.add('bg-indigo-50/70', 'border-indigo-500', 'ring-1', 'ring-indigo-500');
+          btn.classList.remove('border-slate-200');
+        } else {
+          btn.classList.remove('bg-indigo-50/70', 'border-indigo-500', 'ring-1', 'ring-indigo-500');
+          btn.classList.add('border-slate-200');
+        }
+      });
+
+      saveFontSettings();
+    }
+
+    function openFontModal() {
+      applyFontStyles();
+      document.getElementById('fontModal').classList.remove('hidden');
+    }
+
+    function closeFontModal() {
+      document.getElementById('fontModal').classList.add('hidden');
+      renderCalendar();
+    }
+
+    // 切換共編房間
+    function switchRoom(newRoom) {
+      if (!newRoom) return;
+      currentRoom = newRoom.trim();
+      document.getElementById('currentRoomText').textContent = currentRoom;
+      document.getElementById('roomKeyInput').value = currentRoom;
+      if (db && authUser) {
+        listenToRoomData(currentRoom);
+      } else {
+        renderCalendar();
+      }
+    }
+
+    // DOM 事件綁定
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('btnPrevMonth').addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+        renderCalendar();
+      });
+
+      document.getElementById('btnNextMonth').addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        renderCalendar();
+      });
+
+      document.getElementById('btnToday').addEventListener('click', () => {
+        currentDate = new Date();
+        renderCalendar();
+      });
+
+      document.getElementById('filterCategory').addEventListener('change', renderCalendar);
+
+      document.getElementById('btnSwitchRoom').addEventListener('click', () => {
+        switchRoom(document.getElementById('roomKeyInput').value);
+      });
+
+      document.getElementById('roomKeyInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          switchRoom(e.target.value);
+        }
+      });
+
+      // Modal 表單相關
+      document.getElementById('eventForm').addEventListener('submit', handleSaveEvent);
+      document.getElementById('btnDeleteEvent').addEventListener('click', handleDeleteEvent);
+      document.getElementById('btnCloseModal').addEventListener('click', closeModal);
+      document.getElementById('btnCancelModal').addEventListener('click', closeModal);
+
+      // 下拉標籤聯動徽章色彩
+      document.getElementById('eventCategorySelect').addEventListener('change', (e) => {
+        updateModalBadge(e.target.value);
+      });
+
+      // 自訂標籤管理 Modal
+      document.getElementById('btnManageCategories').addEventListener('click', openCategoryModal);
+      document.getElementById('btnQuickOpenCatModal').addEventListener('click', openCategoryModal);
+      document.getElementById('btnCloseCatModal').addEventListener('click', closeCategoryModal);
+      document.getElementById('btnDoneCategory').addEventListener('click', closeCategoryModal);
+      document.getElementById('btnAddCategory').addEventListener('click', handleAddCategory);
+      document.getElementById('newCatName').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleAddCategory();
+        }
+      });
+
+      // 安裝指南 Modal
+      const guideModal = document.getElementById('guideModal');
+      document.getElementById('btnInstallGuide').addEventListener('click', () => {
+        guideModal.classList.remove('hidden');
+      });
+      document.getElementById('btnCloseGuideModal').addEventListener('click', () => {
+        guideModal.classList.add('hidden');
+      });
+      document.getElementById('btnGotItGuide').addEventListener('click', () => {
+        guideModal.classList.add('hidden');
+      });
+
+      // 自訂背景 Modal 事件綁定
+      const bgModal = document.getElementById('bgModal');
+      document.getElementById('btnOpenBgModal').addEventListener('click', openBgModal);
+      document.getElementById('btnCloseBgModal').addEventListener('click', closeBgModal);
+      document.getElementById('btnDoneBgModal').addEventListener('click', closeBgModal);
+
+      // 自訂字體 Modal 事件綁定 (新增)
+      const fontModal = document.getElementById('fontModal');
+      document.getElementById('btnOpenFontModal').addEventListener('click', openFontModal);
+      document.getElementById('btnCloseFontModal').addEventListener('click', closeFontModal);
+      document.getElementById('btnDoneFontModal').addEventListener('click', closeFontModal);
+
+      // 字型選擇器按鈕群
+      document.querySelectorAll('#fontFamilySelector .font-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          fontConfig.family = btn.getAttribute('data-font');
+          applyFontStyles();
+        });
+      });
+
+      // 字體大小滑桿
+      document.getElementById('fontSizeRange').addEventListener('input', (e) => {
+        fontConfig.scale = parseInt(e.target.value, 10);
+        applyFontStyles();
+      });
+
+      // 加粗核取方塊
+      document.getElementById('boldTextCheckbox').addEventListener('change', (e) => {
+        fontConfig.bold = e.target.checked;
+        applyFontStyles();
+      });
+
+      // 恢復預設字體按鈕
+      document.getElementById('btnResetFont').addEventListener('click', () => {
+        fontConfig = {
+          family: 'sans',
+          scale: 100,
+          bold: false
+        };
+        applyFontStyles();
+        renderCalendar();
+      });
+
+      // 自訂單色套用
+      const colorPicker = document.getElementById('bgCustomColorPicker');
+      const colorText = document.getElementById('bgCustomColorText');
+      colorPicker.addEventListener('input', (e) => {
+        colorText.value = e.target.value;
+        applyPresetBg('color', e.target.value);
+      });
+      document.getElementById('btnApplyCustomColor').addEventListener('click', () => {
+        const val = colorText.value.trim() || colorPicker.value;
+        applyPresetBg('color', val);
+      });
+
+      // 本機圖片上傳 (轉為 DataURL)
+      document.getElementById('bgFileInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            applyPresetBg('image', event.target.result);
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // 圖片網址套用
+      document.getElementById('btnApplyBgUrl').addEventListener('click', () => {
+        const url = document.getElementById('bgUrlInput').value.trim();
+        if (url) {
+          applyPresetBg('image', url);
+        }
+      });
+
+      // 遮罩與模糊拉桿
+      document.getElementById('overlayOpacityRange').addEventListener('input', (e) => {
+        bgConfig.overlayOpacity = parseInt(e.target.value, 10);
+        applyBackgroundStyles();
+      });
+      document.getElementById('bgBlurRange').addEventListener('input', (e) => {
+        bgConfig.blur = parseInt(e.target.value, 10);
+        applyBackgroundStyles();
+      });
+
+      // 恢復預設背景
+      document.getElementById('btnResetDefaultBg').addEventListener('click', () => {
+        bgConfig = {
+          type: 'color',
+          value: '#f8fafc',
+          overlayOpacity: 75,
+          blur: 0
+        };
+        applyBackgroundStyles();
+      });
+
+      // 啟動背景設定、連線與日曆渲染
+      initBackground();
+      initFontSettings();
+      initAuthAndData();
+    });
+  </script>
+</body>
+</html>
